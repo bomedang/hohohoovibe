@@ -2036,6 +2036,7 @@ function killBoss(boss) {
   G.bossKilled = true;
   G.bossActive = false;
   G.boss = null;
+  G.waveEnemiesKilled++;
 
   const pts = Math.round(boss.score * G.player.scoreBonus);
   G.score += pts;
@@ -2508,17 +2509,36 @@ function initJoystick() {
 function updatePlayer(dt) {
   const p = G.player;
 
-  // Direction input
+  // Direction input (auto mode)
   let dx = 0, dy = 0;
 
-  if (G.keys['KeyW'] || G.keys['ArrowUp']) dy -= 1;
-  if (G.keys['KeyS'] || G.keys['ArrowDown']) dy += 1;
-  if (G.keys['KeyA'] || G.keys['ArrowLeft']) dx -= 1;
-  if (G.keys['KeyD'] || G.keys['ArrowRight']) dx += 1;
+  // Find nearest enemy for auto movement and aiming
+  let nearest = null, nearDist = Infinity;
+  G.enemies.forEach(e => {
+    if (e.dead) return;
+    const d = Util.dist(p, e);
+    if (d < nearDist) { nearDist = d; nearest = e; }
+  });
+  if (G.boss && !G.boss.dead) {
+    const d = Util.dist(p, G.boss);
+    if (d < nearDist) { nearest = G.boss; }
+  }
 
-  if (G.joystick.active) {
-    dx = G.joystick.dx;
-    dy = G.joystick.dy;
+  if (nearest) {
+    // Move towards nearest enemy
+    const angleToEnemy = Util.angle(p, nearest);
+    dx = Math.cos(angleToEnemy);
+    dy = Math.sin(angleToEnemy);
+
+    // Set angle for aiming
+    p.angle = angleToEnemy;
+  } else {
+    // No enemies, move randomly or stay
+    // For simplicity, stay in place
+    dx = 0;
+    dy = 0;
+    // Keep previous angle or set to 0
+    if (p.angle === undefined) p.angle = 0;
   }
 
   // Normalize
@@ -2535,15 +2555,6 @@ function updatePlayer(dt) {
   // World bounds
   p.x = Util.clamp(p.x, p.r, G.worldW - p.r);
   p.y = Util.clamp(p.y, p.r, G.worldH - p.r);
-
-  // Angle toward mouse / movement
-  const screenCX = p.x - G.camX;
-  const screenCY = p.y - G.camY;
-  if (G.mouse.x !== undefined) {
-    p.angle = Math.atan2(G.mouse.y - screenCY, G.mouse.x - screenCX);
-  } else if (dlen > 0) {
-    p.angle = Math.atan2(dy, dx);
-  }
 
   // Auto shoot
   G.shootTimer -= dt * G.timeScale;
@@ -3004,7 +3015,7 @@ function updateParticles(dt) {
 // WAVE LOGIC
 // ============================================================
 function updateWave(dt) {
-  if (G.bossActive) return;
+  if (G.bossActive || G.boss) return;
 
   // Check if wave is complete
   if (G.enemies.length === 0 && G.waveEnemiesKilled >= G.waveEnemiesTotal) {
