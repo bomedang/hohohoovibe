@@ -2547,7 +2547,7 @@ function updatePlayer(dt) {
 
   // Auto shoot
   G.shootTimer -= dt * G.timeScale;
-  if (G.shootTimer <= 0 && (G.mouse.down || G.keys['Space'])) {
+  if (G.shootTimer <= 0) {
     G.shootTimer = G.shootInterval;
     shootPlayer();
   }
