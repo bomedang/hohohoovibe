@@ -2562,13 +2562,11 @@ function updatePlayer(dt) {
   p.x = Util.clamp(p.x, p.r, G.worldW - p.r);
   p.y = Util.clamp(p.y, p.r, G.worldH - p.r);
 
-  // Aim toward mouse / movement / nearest enemy
+  // Aim toward mouse / nearest enemy
   const screenCX = p.x - G.camX;
   const screenCY = p.y - G.camY;
   if (G.mouse.x !== undefined) {
     p.angle = Math.atan2(G.mouse.y - screenCY, G.mouse.x - screenCX);
-  } else if (dlen > 0) {
-    p.angle = Math.atan2(dy, dx);
   } else {
     let nearest = null, nearDist = Infinity;
     G.enemies.forEach(e => {
