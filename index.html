@@ -2562,25 +2562,19 @@ function updatePlayer(dt) {
   p.x = Util.clamp(p.x, p.r, G.worldW - p.r);
   p.y = Util.clamp(p.y, p.r, G.worldH - p.r);
 
-  // Aim toward mouse / nearest enemy
-  const screenCX = p.x - G.camX;
-  const screenCY = p.y - G.camY;
-  if (G.mouse.x !== undefined) {
-    p.angle = Math.atan2(G.mouse.y - screenCY, G.mouse.x - screenCX);
-  } else {
-    let nearest = null, nearDist = Infinity;
-    G.enemies.forEach(e => {
-      if (e.dead) return;
-      const dist = Util.dist(p, e);
-      if (dist < nearDist) { nearDist = dist; nearest = e; }
-    });
-    if (G.boss && !G.boss.dead) {
-      const dist = Util.dist(p, G.boss);
-      if (dist < nearDist) { nearest = G.boss; }
-    }
-    if (nearest) {
-      p.angle = Util.angle(p, nearest);
-    }
+  // Aim toward nearest enemy
+  let nearest = null, nearDist = Infinity;
+  G.enemies.forEach(e => {
+    if (e.dead) return;
+    const dist = Util.dist(p, e);
+    if (dist < nearDist) { nearDist = dist; nearest = e; }
+  });
+  if (G.boss && !G.boss.dead) {
+    const dist = Util.dist(p, G.boss);
+    if (dist < nearDist) { nearest = G.boss; }
+  }
+  if (nearest) {
+    p.angle = Util.angle(p, nearest);
   }
 
   // Auto shoot
