@@ -1233,6 +1233,17 @@ html, body {
     </div>
   </div>
 
+  <!-- ADMIN PANEL OVERLAY -->
+  <div class="overlay" id="adminOverlay">
+    <div class="overlay-title" style="color:var(--neon-yellow)">ADMIN PANEL</div>
+    <div class="overlay-panel">
+      <div class="admin-panel-content" id="adminPanelContent" style="color:#fff; font-size:0.95rem; line-height:1.6;"></div>
+      <div class="btn-grid" style="max-width:100%">
+        <button class="btn" id="btnCloseAdmin">✕ CLOSE</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Achievement popup -->
   <div class="achievement-popup" id="achievementPopup">
     <div class="ach-title">🏆 ACHIEVEMENT UNLOCKED</div>
@@ -1491,6 +1502,7 @@ const G = {
   waveDuration: 30,
   bossActive: false,
   boss: null,
+  bossEnding: false,
   waveEnemiesKilled: 0,
   waveEnemiesTotal: 0,
 
@@ -1515,7 +1527,7 @@ const G = {
 
   // Input
   keys: {},
-  mouse: { x: 0, y: 0, down: false },
+  mouse: { x: undefined, y: undefined, down: false },
   joystick: { active: false, dx: 0, dy: 0, id: -1 },
   aimJoystick: { active: false, dx: 0, dy: 0, id: -1 },
 
@@ -1527,6 +1539,10 @@ const G = {
   // Shoot auto
   shootTimer: 0,
   shootInterval: 0.15,
+
+  // Admin panel
+  adminPanelOpen: false,
+  adminToggleHeld: false,
 
   // Stats
   totalDamageDealt: 0,
@@ -2035,8 +2051,8 @@ function killBoss(boss) {
   boss.dead = true;
   G.bossKilled = true;
   G.bossActive = false;
+  G.bossEnding = true;
   G.boss = null;
-  G.waveEnemiesKilled++;
 
   const pts = Math.round(boss.score * G.player.scoreBonus);
   G.score += pts;
@@ -2062,6 +2078,7 @@ function killBoss(boss) {
 
   // Next wave
   setTimeout(() => {
+    G.bossEnding = false;
     G.wave++;
     startWave();
   }, 2000);
@@ -2392,10 +2409,18 @@ function initInput() {
     if (e.code === 'KeyQ') activateSkill(0);
     if (e.code === 'KeyE') activateSkill(1);
     if (e.code === 'KeyR') activateSkill(2);
+
+    if ((e.code === 'KeyM' || e.code === 'KeyL') && G.keys['KeyM'] && G.keys['KeyL'] && !G.adminToggleHeld) {
+      G.adminToggleHeld = true;
+      toggleAdminPanel();
+    }
   });
 
   window.addEventListener('keyup', e => {
     G.keys[e.code] = false;
+    if (e.code === 'KeyM' || e.code === 'KeyL') {
+      G.adminToggleHeld = false;
+    }
   });
 
   // Mouse
@@ -2509,36 +2534,17 @@ function initJoystick() {
 function updatePlayer(dt) {
   const p = G.player;
 
-  // Direction input (auto mode)
+  // Direction input
   let dx = 0, dy = 0;
 
-  // Find nearest enemy for auto movement and aiming
-  let nearest = null, nearDist = Infinity;
-  G.enemies.forEach(e => {
-    if (e.dead) return;
-    const d = Util.dist(p, e);
-    if (d < nearDist) { nearDist = d; nearest = e; }
-  });
-  if (G.boss && !G.boss.dead) {
-    const d = Util.dist(p, G.boss);
-    if (d < nearDist) { nearest = G.boss; }
-  }
+  if (G.keys['KeyW'] || G.keys['ArrowUp']) dy -= 1;
+  if (G.keys['KeyS'] || G.keys['ArrowDown']) dy += 1;
+  if (G.keys['KeyA'] || G.keys['ArrowLeft']) dx -= 1;
+  if (G.keys['KeyD'] || G.keys['ArrowRight']) dx += 1;
 
-  if (nearest) {
-    // Move towards nearest enemy
-    const angleToEnemy = Util.angle(p, nearest);
-    dx = Math.cos(angleToEnemy);
-    dy = Math.sin(angleToEnemy);
-
-    // Set angle for aiming
-    p.angle = angleToEnemy;
-  } else {
-    // No enemies, move randomly or stay
-    // For simplicity, stay in place
-    dx = 0;
-    dy = 0;
-    // Keep previous angle or set to 0
-    if (p.angle === undefined) p.angle = 0;
+  if (G.joystick.active) {
+    dx = G.joystick.dx;
+    dy = G.joystick.dy;
   }
 
   // Normalize
@@ -2555,6 +2561,29 @@ function updatePlayer(dt) {
   // World bounds
   p.x = Util.clamp(p.x, p.r, G.worldW - p.r);
   p.y = Util.clamp(p.y, p.r, G.worldH - p.r);
+
+  // Aim toward mouse / movement / nearest enemy
+  const screenCX = p.x - G.camX;
+  const screenCY = p.y - G.camY;
+  if (G.mouse.x !== undefined) {
+    p.angle = Math.atan2(G.mouse.y - screenCY, G.mouse.x - screenCX);
+  } else if (dlen > 0) {
+    p.angle = Math.atan2(dy, dx);
+  } else {
+    let nearest = null, nearDist = Infinity;
+    G.enemies.forEach(e => {
+      if (e.dead) return;
+      const dist = Util.dist(p, e);
+      if (dist < nearDist) { nearDist = dist; nearest = e; }
+    });
+    if (G.boss && !G.boss.dead) {
+      const dist = Util.dist(p, G.boss);
+      if (dist < nearDist) { nearest = G.boss; }
+    }
+    if (nearest) {
+      p.angle = Util.angle(p, nearest);
+    }
+  }
 
   // Auto shoot
   G.shootTimer -= dt * G.timeScale;
@@ -3800,6 +3829,28 @@ function togglePause() {
   }
 }
 
+function toggleAdminPanel() {
+  G.adminPanelOpen = !G.adminPanelOpen;
+  const overlay = document.getElementById('adminOverlay');
+  overlay.classList.toggle('active', G.adminPanelOpen);
+  if (G.adminPanelOpen) updateAdminPanel();
+}
+
+function updateAdminPanel() {
+  const content = document.getElementById('adminPanelContent');
+  if (!content) return;
+  content.innerHTML = `
+    <div style="margin-bottom:1em; font-size:0.95rem; color: #fff;">
+      <div><strong>WAVE:</strong> ${G.wave}</div>
+      <div><strong>SCORE:</strong> ${G.score.toLocaleString()}</div>
+      <div><strong>ENEMIES:</strong> ${G.enemies.length}</div>
+      <div><strong>BOSS ACTIVE:</strong> ${G.bossActive || (G.boss && !G.boss.dead) ? 'YES' : 'NO'}</div>
+      <div><strong>PLAYER HP:</strong> ${Math.round(G.player.hp)} / ${G.player.maxHp}</div>
+      <div><strong>AUTO SHOOT:</strong> ON</div>
+    </div>
+  `;
+}
+
 // ============================================================
 // UI SETUP
 // ============================================================
@@ -3871,6 +3922,11 @@ function initUI() {
     } else {
       document.getElementById('pauseOverlay').classList.add('active');
     }
+  });
+
+  document.getElementById('btnCloseAdmin').addEventListener('click', () => {
+    Audio.sounds.click();
+    toggleAdminPanel();
   });
 
   // Settings toggles
